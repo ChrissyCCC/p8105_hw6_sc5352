@@ -34,32 +34,7 @@ weather_df =
     tmax = tmax / 10) |>
   select(name, id, everything())
 ```
-```{r}
-# lm_weather = lm(tmax ~ tmin + prcp, data = weather_df)
-# 
-# bootstrap_function = function(data, indices) {
-#   sampled_data = data[indices, ]
-#   lm_weather = lm(tmax ~ tmin + prcp, data = sampled_data)
-#   
-#   rsquared = glance(lm_weather)$r.squared
-#   coef_product = log(tidy(lm_weather)$estimate[2] * tidy(lm_weather)$estimate[3])
-#   
-#   return(c(rsquared, coef_product))
-# }
-# 
-# set.seed(123)
-# 
-# bootstrap_results <- boot(data = weather_df, statistic = bootstrap_function, R = 5000)
-# 
-# par(mfrow = c(1, 2))  # Set up a 1x2 grid for side-by-side plots
-# hist(bootstrap_results$t[, 1], main = "Distribution of R-squared", col = "lightblue")
-# hist(bootstrap_results$t[, 2], main = "Distribution of log(beta1 * beta2)", col = "lightgreen")
-# par(mfrow = c(1, 1))  # Reset the plot layout
-# 
-# # Identify the 2.5% and 97.5% quantiles
-# quantiles <- quantile(bootstrap_results$t, c(0.025, 0.975), na.rm = TRUE)
-# print(quantiles)
-```
+
 ```{r, warning=FALSE}
 set.seed(1)
 boot_sample = function(df) {
@@ -82,6 +57,13 @@ bootstrap_results_betas =
   select(strap_number, term, estimate) |>
   pivot_wider(names_from = term, values_from = estimate) |>
   mutate(coef = log(tmin * prcp))
+
+proportion_coef_na = 
+  bootstrap_results_betas |>
+  filter(is.na(coef)) |>
+  summarise(count = n()) |>
+  mutate(proportion = count/5000)
+proportion_coef_na
 
 quantile_betas = 
   bootstrap_results_betas |>
@@ -114,7 +96,9 @@ hist(bootstrap_results_rsq$r.squared, main = "Distribution of rsquared", col = "
 hist(bootstrap_results_betas$coef, main = "Distribution of log(beta1 * beta2)", col = "lightblue")
 par(mfrow = c(1, 1))
 ```
+After taking log of the beta 1 and 2, there are in total 3361 NAs, which account for about 67% of the whole dataset. For those `coef` are significant, the 95% quantile is `r quantile_betas`. 
 
+The 95% quantile for `r_squared` is `r quantile_rsq`.  
 
 #### Problem 3
 ```{r}
@@ -124,28 +108,30 @@ birthweight =
 model_1 = lm(bwt ~ delwt + wtgain + blength, data = birthweight)
 prediction_1 = add_predictions(birthweight, model_1)
 residual_1 = add_residuals(prediction_1, model_1)
-ggplot(residual_1,aes(x = pred, y = resid)) +
-  geom_point() +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
-  labs(title = "Residuals vs Fitted Values", x = "Fitted Values", y = "Residuals")
-
 
 model_lg = lm(bwt ~ blength + gaweeks, data = birthweight)
 prediction_lg = add_predictions(birthweight, model_lg)
 residual_lg = add_residuals(prediction_lg, model_lg)
-ggplot(residual_lg,aes(x = pred, y = resid)) +
-  geom_point() +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
-  labs(title = "Residuals vs Fitted Values", x = "Fitted Values", y = "Residuals")
-
 
 model_hls = lm(bwt ~ bhead * blength * babysex, data = birthweight)
 prediction_hls = add_predictions(birthweight, model_hls)
 residual_hls = add_residuals(prediction_hls, model_hls)
+
+par(mfrow = c(1, 3))
+ggplot(residual_1,aes(x = pred, y = resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Model_1: Residuals vs Fitted Values", x = "Fitted Values", y = "Residuals")
+ggplot(residual_lg,aes(x = pred, y = resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Model_lg: Residuals vs Fitted Values", x = "Fitted Values", y = "Residuals")
 ggplot(residual_hls,aes(x = pred, y = resid)) +
   geom_point() +
   geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
-  labs(title = "Residuals vs Fitted Values", x = "Fitted Values", y = "Residuals")
+  labs(title = "Model_hls: Residuals vs Fitted Values", x = "Fitted Values", y = "Residuals")
+par(mfrow = c(1, 1))
+
 ```
 ```{r}
 cv_df = 
@@ -172,4 +158,10 @@ cv_df =
 
 cv_df
 ```
+My model is `model_1`, which sets `baby’s length at birth (centimeteres)`, `mother’s weight at delivery (pounds)`, and `mother’s weight gain during pregnancy (pounds)` as the predictors.  
+
+The mean of residuals for all three models are around 0.  
+
+Finally, I plotted the prediction error distribution for each candidate model. and the `model_hls` that took `bhead`, `blength`, `babysex`, and their interactions as predictors, has the lowest mse. In the end, I’d probably go with the interaction model.
+
 
